@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PONG</title>
+  <style>
+    canvas {
+      display: block;
+      margin: 0 auto;
+      background-color: black;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <script src="/socket.io/socket.io.js"></script>
+  <script >
+    const canvas = document.getElementById('gameCanvas')
+    canvas.width = 600
+    canvas.height = 400
+    const ctx = canvas.getContext('2d')
+    const socket = io()
+
+    // game data
+    let player = null
+    let adversary = null
+  
+    const paddleHeight = 70
+    const paddleWidth = 10
+  
+    let ballX = canvas.width / 2
+    let ballY = canvas.height / 2
+
+    let leftPaddleY = (canvas.height - paddleHeight) / 2
+    let rightPaddleY = (canvas.height - paddleHeight) / 2
+
+    let leftScore = 0
+    let rightScore = 0
+
+    let waitingPlayers = true
+    let gameEnd = false
+    let winner = 0
+    
+    // socket events
+    socket.on('updatePaddle', (y) => {
+      if (player === 1) {
+        rightPaddleY = y
+      } else {
+        leftPaddleY = y
+      }
+    })
+
+    socket.on('playerSelected', (playerNumber) => {
+      player = playerNumber
+      adversary = player === 1 ? 2 : 1
+    })
+
+    socket.on('gameStart', (point) => {
+      waitingPlayers = false
+      gameEnd = false
+      ballX = point.x
+      ballY = point.y
+      leftScore = 0
+      rightScore = 0
+    })
+
+    socket.on('newRound', (data) => {
+      ballX = data.x
+      ballY = data.y
+    })
+
+
+    socket.on('ballMove', (point) => { 
+      ballX = point.x
+      ballY = point.y
+    })
+
+    socket.on('scoreChange', (score) => {
+      leftScore = score.p1
+      rightScore = score.p2
+    })
+
+    socket.on('gameEnd', (winnerNumber) => {
+      gameEnd = true
+      waitingPlayers = false
+      winner = winnerNumber
+    })
+    
+    // user controls
+    canvas.addEventListener('mousemove', (event) => {
+      const mouseY = event.clientY - canvas.getBoundingClientRect().top
+      const y = mouseY - paddleHeight / 2
+      if (player === 1) {
+        leftPaddleY = y
+      } else {
+        rightPaddleY = y
+      }
+      socket.emit('move', y)
+    })
+
+    window.document.addEventListener('keydown', (e) => {
+      if(e.key === 'r' && gameEnd) {
+        console.log('emit restartGame')
+        socket.emit('restartGame', undefined)
+      }
+    })
+
+    // draw game
+    async function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+      // Desenhar paddles
+      ctx.fillStyle = 'white'
+      ctx.fillRect(0, leftPaddleY, paddleWidth, paddleHeight)
+      ctx.fillRect(canvas.width - paddleWidth, rightPaddleY, paddleWidth, paddleHeight)
+      ctx.fillRect(canvas.width / 2, 0, 2, canvas.height)
+      ctx.beginPath()
+      ctx.ellipse(ballX, ballY, 10, 10, 0, 0, 2 * Math.PI)
+      ctx.stroke()
+      ctx.fill()
+      ctx.font = "30px Arial"
+      ctx.textAlign = "center"
+      ctx.fillText(leftScore, canvas.width / 2 - 40, 30)
+      ctx.fillText(rightScore, canvas.width / 2 + 40, 30)
+      if (gameEnd) {
+        ctx.fillStyle = '#00000088'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        ctx.fillStyle = 'white'
+        ctx.fillText(`player ${winner} won`, canvas.width / 2, canvas.height / 2)
+        ctx.fillText('press "r" to restart', canvas.width / 2, canvas.height / 2 + 40)
+      } else if (waitingPlayers) {
+        ctx.fillStyle = '#00000088'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        ctx.fillStyle = 'white'
+        ctx.fillText("Waiting player 2...", canvas.width / 2, canvas.height / 2)
+      }
+      requestAnimationFrame(draw)
+    }
+
+    requestAnimationFrame(draw)
+
+  </script>
+</body>
+</html>
